@@ -4,41 +4,78 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"refurnish/internal/db"
+	"refurnish/internal/config"
+	"refurnish/internal/models"
 )
 
 func ListMasters(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Connect().Query(`
-		SELECT u.id, m.name, m.description, m.city, m.specializations, m.price_from, m.rating
-		FROM masters m
-		JOIN users u ON u.id = m.user_id
-	`)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
+	db := config.GetDB()
+
+	var masters []models.Master
+	if err := db.Preload("User").
+		Find(&masters).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	var res []map[string]interface{}
-
-	for rows.Next() {
-		var (
-			id, name, description, city string
-			specializations             []string
-			priceFrom, rating           int
-		)
-
-		rows.Scan(&id, &name, &description, &city, &specializations, &priceFrom, &rating)
-
-		res = append(res, map[string]interface{}{
-			"id":              id,
-			"name":            name,
-			"description":     description,
-			"city":            city,
-			"specializations": specializations,
-			"priceFrom":       priceFrom,
-			"rating":          rating,
+	var response []map[string]interface{}
+	for _, master := range masters {
+		response = append(response, map[string]interface{}{
+			"id":              master.ID,
+			"userId":          master.UserID,
+			"name":            master.Name,
+			"description":     master.Description,
+			"city":            master.City,
+			"specializations": master.Specializations,
+			"priceFrom":       master.PriceFrom,
+			"rating":          master.Rating,
+			"email":           master.User.Email,
 		})
 	}
 
-	json.NewEncoder(w).Encode(res)
+	json.NewEncoder(w).Encode(response)
+}
+
+// Обновление профиля мастера
+func UpdateMasterProfile(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("user_id").(string)
+
+	var req struct {
+		Name            string   `json:"name"`
+		Description     string   `json:"description"`
+		City            string   `json:"city"`
+		Specializations []string `json:"specializations"`
+		PriceFrom       int      `json:"priceFrom"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	db := config.GetDB()
+
+	// Находим мастера по user_id
+	var master models.Master
+	if err := db.Where("user_id = ?", userID).First(&master).Error; err != nil {
+		http.Error(w, "Master not found", http.StatusNotFound)
+		return
+	}
+
+	// Обновляем поля
+	master.Name = req.Name
+	master.Description = req.Description
+	master.City = req.City
+	master.Specializations = req.Specializations
+	master.PriceFrom = req.PriceFrom
+
+	if err := db.Save(&master).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":   "updated",
+		"masterId": master.ID,
+	})
 }

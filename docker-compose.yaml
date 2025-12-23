@@ -1,19 +1,27 @@
+version: '3.8'
+
+networks:
+  app-network:
+    driver: bridge
+
 services:
-  db:
+  pg:
     image: postgres:16
     environment:
-      POSTGRES_USER: refurnish
+      POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
-      POSTGRES_DB: user
+      POSTGRES_DB: refurnish
     ports:
       - "5432:5432"
     volumes:
       - ./backend/dbdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user"]
-      interval: 2s
+      interval: 5s
+      timeout: 5s
       retries: 10
-      timeout: 2s
+    networks:
+      - app-network
 
   backend:
     build:
@@ -22,11 +30,24 @@ services:
     ports:
       - "8080:8080"
     environment:
-      DATABASE_URL: postgres://user:pass@db:5432/refurnish?sslmode=disable
       JWT_SECRET: supersecret123
-
-    volumes:
-      - ./backend/migrations:/app/migrations
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - app-network
+
+  # Frontend (Vite/React/Vue)
+  frontend:
+    build:
+      context: ./frontend  # <-- Убедитесь, что фронтенд находится в папке frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:8080  # API будет доступен по localhost:8080
+    depends_on:
+      - backend

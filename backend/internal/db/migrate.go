@@ -1,39 +1,27 @@
 package db
 
 import (
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-	_ "github.com/lib/pq"
 	"log"
-	"os"
+	"refurnish/internal/config"
+	"refurnish/internal/models"
 )
 
 func RunMigrations() {
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres://user:pass@db:5432/refurnish?sslmode=disable"
-	}
+	db := config.GetDB()
 
-	db := Connect()
-
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	m, err := migrate.NewWithDatabaseInstance(
-		"file://migrations", // путь внутри контейнера
-		"postgres", driver,
+	// Автомиграция моделей
+	err := db.AutoMigrate(
+		&models.User{},
+		&models.Master{},
+		&models.Client{},
+		&models.Project{},
+		&models.Response{},
+		// добавьте другие модели здесь
 	)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Migration failed:", err)
 	}
 
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		log.Fatal(err)
-	}
-
-	log.Println("migrations applied")
+	log.Println("Migrations applied successfully")
 }

@@ -3,11 +3,16 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
-	"refurnish/internal/db"
+	"refurnish/internal/config"
+	"refurnish/internal/models"
 )
 
+// Отклик на проект
 func RespondToProject(w http.ResponseWriter, r *http.Request) {
+	masterID := r.Context().Value("user_id").(string)
+
 	var req struct {
 		ProjectID string `json:"projectId"`
 		Comment   string `json:"comment"`
@@ -15,58 +20,84 @@ func RespondToProject(w http.ResponseWriter, r *http.Request) {
 		StartDate string `json:"startDate"`
 	}
 
-	json.NewDecoder(r.Body).Decode(&req)
-
-	masterID := r.Context().Value("user_id")
-
-	_, err := db.Connect().Exec(`
-		INSERT INTO responses (project_id, master_id, comment, price, start_date)
-		VALUES ($1,$2,$3,$4,$5)
-	`,
-		req.ProjectID,
-		masterID,
-		req.Comment,
-		req.Price,
-		req.StartDate,
-	)
-
-	if err != nil {
-		http.Error(w, err.Error(), 400)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
+
+	// Парсим дату начала работ
+	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	if err != nil {
+		http.Error(w, "Invalid date format. Use YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+
+	db := config.GetDB()
+
+	// Проверяем существование проекта
+	var project models.Project
+	if err := db.Where("id = ? AND status = ?", req.ProjectID, "published").
+		First(&project).Error; err != nil {
+		http.Error(w, "Project not found or not available", http.StatusNotFound)
+		return
+	}
+
+	// Проверяем, не откликался ли уже мастер
+	var existingResponse models.Response
+	if err := db.Where("project_id = ? AND master_id = ?", req.ProjectID, masterID).
+		First(&existingResponse).Error; err == nil {
+		http.Error(w, "You have already responded to this project", http.StatusBadRequest)
+		return
+	}
+
+	// Создаем отклик
+	response := models.Response{
+		ProjectID: req.ProjectID,
+		MasterID:  masterID,
+		Comment:   req.Comment,
+		Price:     req.Price,
+		StartDate: startDate,
+	}
+
+	if err := db.Create(&response).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":     "responded",
+		"responseId": response.ID,
+		"projectId":  req.ProjectID,
+	})
 }
 
+// Мои отклики
 func MyResponses(w http.ResponseWriter, r *http.Request) {
-	masterID := r.Context().Value("user_id")
+	masterID := r.Context().Value("user_id").(string)
 
-	rows, err := db.Connect().Query(`
-		SELECT r.id, p.title, r.comment, r.price, r.start_date
-		FROM responses r
-		JOIN projects p ON p.id = r.project_id
-		WHERE r.master_id = $1
-	`, masterID)
+	db := config.GetDB()
 
-	if err != nil {
-		http.Error(w, err.Error(), 500)
+	var responses []models.Response
+	if err := db.Where("master_id = ?", masterID).
+		Preload("Project").
+		Find(&responses).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	var res []map[string]interface{}
-
-	for rows.Next() {
-		var id, title, comment, startDate string
-		var price int
-
-		rows.Scan(&id, &title, &comment, &price, &startDate)
-
-		res = append(res, map[string]interface{}{
-			"id":        id,
-			"title":     title,
-			"comment":   comment,
-			"price":     price,
-			"startDate": startDate,
+	var result []map[string]interface{}
+	for _, response := range responses {
+		result = append(result, map[string]interface{}{
+			"id":        response.ID,
+			"projectId": response.ProjectID,
+			"title":     response.Project.Title,
+			"comment":   response.Comment,
+			"price":     response.Price,
+			"startDate": response.StartDate.Format("2006-01-02"),
+			"createdAt": response.CreatedAt.Format(time.RFC3339),
+			"status":    response.Project.Status,
 		})
 	}
 
-	json.NewEncoder(w).Encode(res)
+	json.NewEncoder(w).Encode(result)
 }
