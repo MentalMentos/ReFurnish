@@ -117,5 +117,4 @@ GitHub-репозиторий: https://github.com/<org>/<repo>
 Согласно спецификации проекта:
 
 - **Backend**: Go (основной сервис API), PostgreSQL как основная база данных.
-- **Frontend (web)**: React / SPA, адаптивный интерфейс под desktop + mobile.
-- **Инфраструктура**: развёртывание на Yandex Cloud или AWS (для прототипа допускается использование одной среды).
+- **Frontend (web)**: React / SPA, адаптивный интерфейс под desktop
