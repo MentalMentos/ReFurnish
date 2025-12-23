@@ -12,7 +12,7 @@ import (
 func RunMigrations() {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://refurnish:pass@localhost:5432/refurnish?sslmode=disable"
+		dsn = "postgres://user:pass@db:5432/refurnish?sslmode=disable"
 	}
 
 	db := Connect()
