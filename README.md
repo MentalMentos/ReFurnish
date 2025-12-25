@@ -1,4 +1,4 @@
-# ReFurnish — вертикальный прототип (MVP core)
+# ReFurnish — прототип (MVP core)
 
 ## О проекте
 
