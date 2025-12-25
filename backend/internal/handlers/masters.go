@@ -79,3 +79,62 @@ func UpdateMasterProfile(w http.ResponseWriter, r *http.Request) {
 		"masterId": master.ID,
 	})
 }
+
+// GetMasterProfile - GET /api/master/profile
+func GetMasterProfile(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("user_id").(uint)
+	db := config.GetDB()
+
+	var master models.Master
+	if err := db.Where("user_id = ?", userID).First(&master).Error; err != nil {
+		http.Error(w, "Мастер не найден", http.StatusNotFound)
+		return
+	}
+
+	var user models.User
+	db.First(&user, userID)
+
+	response := map[string]interface{}{
+		"id":     master.ID,
+		"name":   user.Email,
+		"email":  user.Email,
+		"phone":  "+79213946509",
+		"city":   master.City,
+		"rating": master.Rating,
+	}
+
+	jsonResponse(w, response)
+}
+
+// MasterAssignedProjects - GET /api/master/assigned-projects
+func MasterAssignedProjects(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("user_id").(uint)
+	db := config.GetDB()
+
+	var master models.Master
+	if err := db.Where("user_id = ?", userID).First(&master).Error; err != nil {
+		http.Error(w, "Мастер не найден", http.StatusNotFound)
+		return
+	}
+
+	var projects []models.Project
+	db.Preload("Client.User").Where("master_id = ?", master.ID).Find(&projects)
+
+	var result []map[string]interface{}
+	for _, project := range projects {
+		result = append(result, map[string]interface{}{
+			"id":            project.ID,
+			"title":         project.Title,
+			"description":   project.Description,
+			"furnitureType": project.FurnitureType,
+			"budget":        project.Budget,
+			"deadline":      project.Deadline,
+			"city":          project.City,
+			"status":        project.Status,
+			"clientName":    project.Client.User.Email,
+			"clientPhone":   "+79213946509",
+		})
+	}
+
+	jsonResponse(w, result)
+}

@@ -1,9 +1,10 @@
+// internal/handlers/auth.go
 package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"refurnish/internal/config"
@@ -11,127 +12,168 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
-type AuthRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Role     string `json:"role"` // "client" или "master"
-	Name     string `json:"name,omitempty"`
-}
-
-// Регистрация
+// Register - регистрация пользователя
 func Register(w http.ResponseWriter, r *http.Request) {
-	var req AuthRequest
+	var req struct {
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Phone    string `json:"phone"`
+		Role     string `json:"role"`
+	}
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+		http.Error(w, "Неверный формат данных", http.StatusBadRequest)
 		return
 	}
 
-	// Хеширование пароля
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), 14)
-	if err != nil {
-		http.Error(w, "Password error", http.StatusInternalServerError)
+	// Валидация
+	if req.Name == "" || req.Email == "" || req.Password == "" || req.Role == "" {
+		http.Error(w, "Заполните все обязательные поля", http.StatusBadRequest)
+		return
+	}
+
+	if req.Role != "client" && req.Role != "master" {
+		http.Error(w, "Роль должна быть 'client' или 'master'", http.StatusBadRequest)
 		return
 	}
 
 	db := config.GetDB()
 
-	// Создание пользователя
+	// Проверяем существование пользователя
+	var existingUser models.User
+	if err := db.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
+		http.Error(w, "Пользователь с таким email уже существует", http.StatusConflict)
+		return
+	}
+
+	// Хешируем пароль
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "Ошибка обработки пароля", http.StatusInternalServerError)
+		return
+	}
+
+	// Создаем пользователя
 	user := models.User{
 		Email:    req.Email,
 		Password: string(hashedPassword),
 		Role:     req.Role,
 	}
 
-	// Начало транзакции
-	tx := db.Begin()
-
-	if err := tx.Create(&user).Error; err != nil {
-		tx.Rollback()
-		http.Error(w, "Email already exists", http.StatusBadRequest)
+	if err := db.Create(&user).Error; err != nil {
+		http.Error(w, "Ошибка создания пользователя", http.StatusInternalServerError)
 		return
 	}
 
-	// Создание профиля в зависимости от роли
-	if req.Role == "master" {
-		master := models.Master{
-			UserID:      user.ID,
-			Name:        req.Name,
-			Description: "",
-			City:        "",
-			PriceFrom:   0,
-			Rating:      0,
-		}
-		if err := tx.Create(&master).Error; err != nil {
-			tx.Rollback()
-			http.Error(w, "Error creating master profile", http.StatusInternalServerError)
-			return
-		}
-	} else if req.Role == "client" {
+	// Создаем профиль
+	if req.Role == "client" {
 		client := models.Client{
 			UserID: user.ID,
-			Name:   req.Name,
-			Phone:  "",
 		}
-		if err := tx.Create(&client).Error; err != nil {
-			tx.Rollback()
-			http.Error(w, "Error creating client profile", http.StatusInternalServerError)
-			return
+		db.Create(&client)
+	} else if req.Role == "master" {
+		master := models.Master{
+			UserID: user.ID,
+			City:   "",
 		}
+		db.Create(&master)
 	}
 
-	tx.Commit()
+	// СОЗДАЕМ JWT ТОКЕН (ВАЖНО!)
+	claims := jwt.MapClaims{
+		"user_id": user.ID,
+		"role":    user.Role,
+		"email":   user.Email,
+		"exp":     time.Now().Add(72 * time.Hour).Unix(),
+		"iat":     time.Now().Unix(),
+	}
 
-	json.NewEncoder(w).Encode(map[string]string{
-		"status": "ok",
-		"userId": user.ID,
-	})
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte("your-secret-key-change-in-production"))
+	if err != nil {
+		log.Printf("Ошибка создания токена: %v", err)
+		http.Error(w, "Ошибка создания токена", http.StatusInternalServerError)
+		return
+	}
+
+	// Возвращаем полный ответ с токеном
+	response := map[string]interface{}{
+		"status":  "ok",
+		"token":   tokenString,
+		"userId":  user.ID,
+		"user_id": user.ID, // дублируем для совместимости
+		"role":    user.Role,
+		"email":   user.Email,
+		"message": "Регистрация успешна",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
-// Вход
+// Login - вход пользователя
 func Login(w http.ResponseWriter, r *http.Request) {
-	var req AuthRequest
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+		http.Error(w, "Неверный формат данных", http.StatusBadRequest)
 		return
 	}
 
 	db := config.GetDB()
 
+	// Ищем пользователя
 	var user models.User
 	if err := db.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		http.Error(w, "User not found", http.StatusUnauthorized)
+		if err == gorm.ErrRecordNotFound {
+			http.Error(w, "Пользователь не найден", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Ошибка базы данных", http.StatusInternalServerError)
 		return
 	}
 
-	// Проверка пароля
+	// Проверяем пароль
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		http.Error(w, "Wrong password", http.StatusUnauthorized)
+		http.Error(w, "Неверный пароль", http.StatusUnauthorized)
 		return
 	}
 
-	// Генерация JWT токена
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	// Создаем JWT токен
+	claims := jwt.MapClaims{
 		"user_id": user.ID,
 		"role":    user.Role,
-		"exp":     time.Now().Add(time.Hour * 72).Unix(),
-	})
-
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "supersecret123"
+		"email":   user.Email,
+		"exp":     time.Now().Add(72 * time.Hour).Unix(),
+		"iat":     time.Now().Unix(),
 	}
 
-	tokenString, err := token.SignedString([]byte(secret))
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte("your-secret-key-change-in-production"))
 	if err != nil {
-		http.Error(w, "Error generating token", http.StatusInternalServerError)
+		log.Printf("Ошибка создания токена: %v", err)
+		http.Error(w, "Ошибка создания токена", http.StatusInternalServerError)
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]string{
-		"token":  tokenString,
-		"role":   user.Role,
-		"userId": user.ID,
-	})
+	// Возвращаем ответ
+	response := map[string]interface{}{
+		"status":  "ok",
+		"token":   tokenString,
+		"userId":  user.ID,
+		"user_id": user.ID,
+		"role":    user.Role,
+		"email":   user.Email,
+		"message": "Вход выполнен успешно",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
