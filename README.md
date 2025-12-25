@@ -1,5 +1,4 @@
 # ReFurnish — вертикальный прототип (MVP core)
-GitHub-репозиторий: https://github.com/<org>/<repo>
 
 ## О проекте
 
