@@ -1,0 +1,41 @@
+<!-- test-api.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+<h2>Тест регистрации API</h2>
+<button onclick="testRegister()">Тест регистрации</button>
+<div id="result"></div>
+
+<script>
+    async function testRegister() {
+        const data = {
+            name: "Тест Пользователь",
+            email: "test" + Date.now() + "@example.com",
+            password: "test123",
+            phone: "+79991234567",
+            role: "client"
+        };
+
+        try {
+            const response = await fetch('http://localhost:8080/api/auth/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+            document.getElementById('result').innerHTML =
+                `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+        } catch (error) {
+            document.getElementById('result').innerHTML =
+                `Ошибка: ${error}`;
+        }
+    }
+</script>
+</body>
+</html>

@@ -1,13 +1,118 @@
 <!doctype html>
-<html lang="en">
-  <head>
+<html lang="ru">
+<head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+    <title>ReFurnish - Мебель на заказ</title>
+
+    <!-- Preconnect для шрифтов -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <!-- Google Fonts Inter (опционально) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Иконка для PWA -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+
+    <!-- Мета-теги для SEO и соц. сетей -->
+    <meta name="description" content="ReFurnish - платформа для заказа уникальной мебели у проверенных мастеров">
+    <meta name="keywords" content="мебель, заказ, мастер, изготовление, дизайн, интерьер">
+    <meta name="theme-color" content="#3b82f6">
+
+    <!-- Open Graph мета-теги -->
+    <meta property="og:title" content="ReFurnish - Мебель на заказ">
+    <meta property="og:description" content="Создайте уникальную мебель с лучшими мастерами">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://refurnish.example.com">
+    <meta property="og:image" content="/og-image.png">
+
+    <!-- Twitter Card мета-теги -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="ReFurnish - Мебель на заказ">
+    <meta name="twitter:description" content="Создайте уникальную мебель с лучшими мастерами">
+    <meta name="twitter:image" content="/twitter-image.png">
+
+    <!-- iOS PWA мета-теги -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ReFurnish">
+
+    <style>
+        /* Предзагрузка критических стилей */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+        }
+
+        #root {
+            width: 100%;
+            min-height: 100vh;
+        }
+
+        /* Стили для загрузки */
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+<!-- Экран загрузки (исчезает после загрузки JS) -->
+<div id="loading" class="loading">
+    <div class="loading-spinner"></div>
+</div>
+
+<!-- Основное приложение -->
+<div id="root"></div>
+
+<!-- Удаляем экран загрузки после загрузки JS -->
+<script>
+    window.addEventListener('load', function() {
+        const loading = document.getElementById('loading');
+        if (loading) {
+            setTimeout(() => {
+                loading.style.opacity = '0';
+                loading.style.transition = 'opacity 0.3s ease';
+                setTimeout(() => loading.remove(), 300);
+            }, 500);
+        }
+    });
+</script>
+
+<script type="module" src="/src/main.tsx"></script>
+</body>
 </html>
