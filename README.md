@@ -117,3 +117,14 @@
 
 - **Backend**: Go (основной сервис API), PostgreSQL как основная база данных.
 - **Frontend (web)**: React / SPA, адаптивный интерфейс под desktop
+
+## Инструкция по запуску:
+- git clone https://github.com/MentalMentos/ReFurnish.git
+- cd Refurnish
+- docker-compose up -d db
+- cd ./backend/cmd/server
+- go run main.go
+- cd ../../../ReFurnish/frontend
+- npm run dev
+- o + enter
+  
